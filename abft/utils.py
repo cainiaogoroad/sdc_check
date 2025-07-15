@@ -1,26 +1,36 @@
+# abft/utils.py
+
 """
 ABFT工具函数，用于计算和验证校验和
 """
 
 import torch
 import numpy as np
+from typing import Union, Dict, Any
 
-def checksum(tensor):
+TensorOrArray = Union[torch.Tensor, np.ndarray]
+
+def checksum(tensor: TensorOrArray) -> Dict[str, Any]:
     """
-    计算张量的校验和
+    计算张量的校验和。
     
-    支持PyTorch张量和NumPy数组
+    支持PyTorch张量和NumPy数组。
     
     Args:
-        tensor: 输入张量或数组
+        tensor: 输入的PyTorch张量或NumPy数组。
         
     Returns:
-        校验和字典，包含行和、列和、总和等
+        一个包含多种校验和的字典，例如：
+        - 'sum': 张量所有元素的总和。
+        - 'mean': 张量所有元素的平均值。
+        - 'std': 张量所有元素的标准差。
+        - 'row_sum': (对于2D或更高维度) 张量在最后一个维度的和。
+        - 'col_sum': (对于2D或更高维度) 张量在第一个维度的和。
     """
     if isinstance(tensor, torch.Tensor):
         # PyTorch张量
         if tensor.dim() == 1:
-            # 一维张量只有总和
+            # 一维张量
             return {
                 'sum': tensor.sum().item(),
                 'mean': tensor.mean().item(),
@@ -29,21 +39,18 @@ def checksum(tensor):
         else:
             # 二维或更高维张量
             checksums = {
-                'row_sum': torch.sum(tensor, dim=-1).detach().clone(),  # 最后一维求和
+                'row_sum': torch.sum(tensor, dim=-1).detach().clone(),
                 'sum': tensor.sum().item(),
                 'mean': tensor.mean().item(),
                 'std': tensor.std().item()
             }
-            
-            # 如果是二维以上，还可以计算其他维度的和
             if tensor.dim() > 1:
-                checksums['col_sum'] = torch.sum(tensor, dim=0).detach().clone()  # 第一维求和
-            
+                checksums['col_sum'] = torch.sum(tensor, dim=0).detach().clone()
             return checksums
     else:
         # NumPy数组
         if tensor.ndim == 1:
-            # 一维数组只有总和
+            # 一维数组
             return {
                 'sum': np.sum(tensor).item(),
                 'mean': np.mean(tensor).item(),
@@ -52,29 +59,26 @@ def checksum(tensor):
         else:
             # 二维或更高维数组
             checksums = {
-                'row_sum': np.sum(tensor, axis=-1).copy(),  # 最后一维求和
+                'row_sum': np.sum(tensor, axis=-1).copy(),
                 'sum': np.sum(tensor).item(),
                 'mean': np.mean(tensor).item(),
                 'std': np.std(tensor).item()
             }
-            
-            # 如果是二维以上，还可以计算其他维度的和
             if tensor.ndim > 1:
-                checksums['col_sum'] = np.sum(tensor, axis=0).copy()  # 第一维求和
-            
+                checksums['col_sum'] = np.sum(tensor, axis=0).copy()
             return checksums
 
-def verify_checksum(tensor, original_checksum, tolerance=1e-5):
+def verify_checksum(tensor: TensorOrArray, original_checksum: Dict[str, Any], tolerance: float = 1e-5) -> Dict[str, Any]:
     """
-    验证张量校验和是否与原始校验和匹配
+    验证张量校验和是否与原始校验和匹配。
     
     Args:
-        tensor: 要验证的张量
-        original_checksum: 原始校验和
-        tolerance: 容差阈值
+        tensor: 要验证的张量。
+        original_checksum: 原始校验和字典。
+        tolerance: 容差阈值，用于浮点数比较。
         
     Returns:
-        验证结果字典，包含是否有损坏及相关信息
+        一个包含验证结果的字典，详细说明了哪些校验和不匹配。
     """
     # 计算当前校验和
     current_checksum = checksum(tensor)
@@ -89,37 +93,22 @@ def verify_checksum(tensor, original_checksum, tolerance=1e-5):
     std_diff = abs(current_checksum['std'] - original_checksum['std'])
     std_corrupted = std_diff > tolerance
     
-    # 检查行和列校验和（如果存在）
-    row_corrupted = False
-    col_corrupted = False
-    corrupted_rows = []
-    corrupted_cols = []
+    # 检查行和列校验和
+    row_corrupted, col_corrupted = False, False
+    corrupted_rows, corrupted_cols = [], []
     
     if 'row_sum' in original_checksum and 'row_sum' in current_checksum:
-        if isinstance(original_checksum['row_sum'], torch.Tensor):
-            row_diff = torch.abs(current_checksum['row_sum'] - original_checksum['row_sum'])
-            row_corrupted = torch.any(row_diff > tolerance).item()
-            if row_corrupted:
-                corrupted_rows = torch.where(row_diff > tolerance)[0].cpu().numpy().tolist()
-        else:
-            row_diff = np.abs(current_checksum['row_sum'] - original_checksum['row_sum'])
-            row_corrupted = np.any(row_diff > tolerance).item()
-            if row_corrupted:
-                corrupted_rows = np.where(row_diff > tolerance)[0].tolist()
-    
+        row_diff = np.abs(current_checksum['row_sum'] - original_checksum['row_sum'])
+        row_corrupted = np.any(row_diff > tolerance).item()
+        if row_corrupted:
+            corrupted_rows = np.where(row_diff > tolerance)[0].tolist()
+
     if 'col_sum' in original_checksum and 'col_sum' in current_checksum:
-        if isinstance(original_checksum['col_sum'], torch.Tensor):
-            col_diff = torch.abs(current_checksum['col_sum'] - original_checksum['col_sum'])
-            col_corrupted = torch.any(col_diff > tolerance).item()
-            if col_corrupted:
-                corrupted_cols = torch.where(col_diff > tolerance)[0].cpu().numpy().tolist()
-        else:
-            col_diff = np.abs(current_checksum['col_sum'] - original_checksum['col_sum'])
-            col_corrupted = np.any(col_diff > tolerance).item()
-            if col_corrupted:
-                corrupted_cols = np.where(col_diff > tolerance)[0].tolist()
-    
-    # 综合判断是否有损坏
+        col_diff = np.abs(current_checksum['col_sum'] - original_checksum['col_sum'])
+        col_corrupted = np.any(col_diff > tolerance).item()
+        if col_corrupted:
+            corrupted_cols = np.where(col_diff > tolerance)[0].tolist()
+
     is_corrupted = sum_corrupted or mean_corrupted or std_corrupted or row_corrupted or col_corrupted
     
     return {
@@ -134,4 +123,4 @@ def verify_checksum(tensor, original_checksum, tolerance=1e-5):
         'diff_sum': sum_diff,
         'diff_mean': mean_diff,
         'diff_std': std_diff
-    } 
+    }
