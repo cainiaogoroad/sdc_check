@@ -48,7 +48,7 @@ sdc_check/
 
 1. 克隆仓库
 ```bash
-git clone https://github.com/yourusername/sdc_check.git
+git clone git@github.com:cainiaogoroad/sdc_check.git
 cd sdc_check
 ```
 
