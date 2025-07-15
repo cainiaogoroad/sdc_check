@@ -4,5 +4,17 @@
 
 from .detector import SDCDetector
 from .utils import checksum, verify_checksum
+from .fault_injection import (
+    FaultType, FaultLocation, FaultPattern, FaultTiming,
+    FaultInjector, BitFlipInjector, RandomValueInjector, 
+    GaussianNoiseInjector, ZeroValueInjector, ConstantInjector,
+    ScalingInjector, PermutationInjector
+)
 
-__all__ = ["SDCDetector", "checksum", "verify_checksum"] 
+__all__ = [
+    "SDCDetector", "checksum", "verify_checksum",
+    "FaultType", "FaultLocation", "FaultPattern", "FaultTiming",
+    "FaultInjector", "BitFlipInjector", "RandomValueInjector", 
+    "GaussianNoiseInjector", "ZeroValueInjector", "ConstantInjector",
+    "ScalingInjector", "PermutationInjector"
+] 
